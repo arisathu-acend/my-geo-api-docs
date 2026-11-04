@@ -4,16 +4,233 @@
   <meta charset="UTF-8" />
   <title>Geo Fencing API Docs</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+
+  <style>
+    :root {
+      --night-owl-bg: #011627;
+      --night-owl-panel: #0b2942;
+      --night-owl-border: #1d3b53;
+      --night-owl-text: #d6deeb;
+      --night-owl-muted: #8ca5c3;
+      --night-owl-blue: #82aaff;
+      --night-owl-green: #c3e88d;
+      --night-owl-orange: #f78c6c;
+      --night-owl-purple: #c792ea;
+    }
+
+    html[data-theme="dark"] body {
+      background: var(--night-owl-bg);
+      color: var(--night-owl-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    html[data-theme="dark"] .swagger-ui {
+      background: var(--night-owl-bg);
+      color: var(--night-owl-text);
+    }
+
+    html[data-theme="dark"] .swagger-ui .info,
+    html[data-theme="dark"] .swagger-ui .opblock-tag,
+    html[data-theme="dark"] .swagger-ui .opblock .opblock-summary-description,
+    html[data-theme="dark"] .swagger-ui .opblock-description-wrapper p,
+    html[data-theme="dark"] .swagger-ui .opblock-external-docs-wrapper p,
+    html[data-theme="dark"] .swagger-ui .responses-inner h4,
+    html[data-theme="dark"] .swagger-ui .responses-inner h5,
+    html[data-theme="dark"] .swagger-ui .scheme-container,
+    html[data-theme="dark"] .swagger-ui .model-title,
+    html[data-theme="dark"] .swagger-ui .parameter__name,
+    html[data-theme="dark"] .swagger-ui .parameter__type,
+    html[data-theme="dark"] .swagger-ui .parameter__in,
+    html[data-theme="dark"] .swagger-ui .tab li,
+    html[data-theme="dark"] .swagger-ui .btn,
+    html[data-theme="dark"] .swagger-ui label,
+    html[data-theme="dark"] .swagger-ui select,
+    html[data-theme="dark"] .swagger-ui input,
+    html[data-theme="dark"] .swagger-ui textarea {
+      color: var(--night-owl-text);
+    }
+
+    html[data-theme="dark"] .swagger-ui .scheme-container {
+      background: var(--night-owl-panel);
+      border-bottom: 1px solid var(--night-owl-border);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock {
+      background: var(--night-owl-panel);
+      border: 1px solid var(--night-owl-border);
+      border-radius: 8px;
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-get {
+      border-color: var(--night-owl-blue);
+      background: rgba(130, 170, 255, 0.08);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-post {
+      border-color: var(--night-owl-green);
+      background: rgba(195, 232, 141, 0.08);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-put {
+      border-color: var(--night-owl-orange);
+      background: rgba(247, 140, 108, 0.08);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-delete {
+      border-color: #ef5350;
+      background: rgba(239, 83, 80, 0.08);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock-summary-method {
+      background: transparent;
+      color: var(--night-owl-text);
+      border: 1px solid currentColor;
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-get .opblock-summary-method {
+      color: var(--night-owl-blue);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-post .opblock-summary-method {
+      color: var(--night-owl-green);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-put .opblock-summary-method {
+      color: var(--night-owl-orange);
+    }
+
+    html[data-theme="dark"] .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+      color: #ef5350;
+    }
+
+    html[data-theme="dark"] .swagger-ui .models,
+    html[data-theme="dark"] .swagger-ui .model-box,
+    html[data-theme="dark"] .swagger-ui .responses,
+    html[data-theme="dark"] .swagger-ui .parameters,
+    html[data-theme="dark"] .swagger-ui .response-col_status,
+    html[data-theme="dark"] .swagger-ui .response-col_description {
+      background: transparent;
+      border-color: var(--night-owl-border);
+    }
+
+    html[data-theme="dark"] .swagger-ui .model-box,
+    html[data-theme="dark"] .swagger-ui .responses,
+    html[data-theme="dark"] .swagger-ui .parameters {
+      background: var(--night-owl-panel);
+    }
+
+    html[data-theme="dark"] .swagger-ui table thead tr th,
+    html[data-theme="dark"] .swagger-ui table thead tr td {
+      border-bottom: 1px solid var(--night-owl-border);
+      color: var(--night-owl-muted);
+    }
+
+    html[data-theme="dark"] .swagger-ui table tbody tr td {
+      border-bottom: 1px solid var(--night-owl-border);
+    }
+
+    html[data-theme="dark"] .swagger-ui input,
+    html[data-theme="dark"] .swagger-ui select,
+    html[data-theme="dark"] .swagger-ui textarea {
+      background: #041d33;
+      border: 1px solid var(--night-owl-border);
+    }
+
+    html[data-theme="dark"] .swagger-ui input:focus,
+    html[data-theme="dark"] .swagger-ui select:focus,
+    html[data-theme="dark"] .swagger-ui textarea:focus {
+      border-color: var(--night-owl-blue);
+      outline: none;
+    }
+
+    html[data-theme="dark"] .swagger-ui .btn {
+      background: #041d33;
+      border: 1px solid var(--night-owl-border);
+    }
+
+    html[data-theme="dark"] .swagger-ui .btn:hover {
+      border-color: var(--night-owl-blue);
+    }
+
+    html[data-theme="dark"] .swagger-ui .highlight-code,
+    html[data-theme="dark"] .swagger-ui .highlight-code pre,
+    html[data-theme="dark"] .swagger-ui pre,
+    html[data-theme="dark"] .swagger-ui code {
+      background: #021426 !important;
+      color: var(--night-owl-text) !important;
+    }
+
+    html[data-theme="dark"] .swagger-ui .markdown code,
+    html[data-theme="dark"] .swagger-ui .renderedMarkdown code {
+      background: #041d33;
+      color: var(--night-owl-purple);
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    html[data-theme="dark"] .swagger-ui .markdown a,
+    html[data-theme="dark"] .swagger-ui .renderedMarkdown a {
+      color: var(--night-owl-blue);
+    }
+
+    html[data-theme="dark"] .swagger-ui .info .title {
+      color: #ffffff;
+    }
+
+    html[data-theme="dark"] .swagger-ui .info .base-url {
+      color: var(--night-owl-muted);
+    }
+
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 9999;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      backdrop-filter: blur(6px);
+    }
+
+    .theme-toggle:hover {
+      border-color: #82aaff;
+      color: #82aaff;
+    }
+  </style>
 </head>
 <body>
+  <button id="themeToggle" class="theme-toggle">🌙 Dark mode</button>
   <div id="swagger-ui"></div>
 
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
 
   <script>
+    const THEME_KEY = "swagger-theme";
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      document.getElementById("themeToggle").textContent =
+        theme === "dark" ? "☀️ Light mode" : "🌙 Dark mode";
+      localStorage.setItem(THEME_KEY, theme);
+    }
+
     window.onload = function () {
+      const savedTheme = localStorage.getItem(THEME_KEY) || "light";
+      applyTheme(savedTheme);
+
+      document.getElementById("themeToggle").addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme");
+        applyTheme(current === "dark" ? "light" : "dark");
+      });
+
       window.ui = SwaggerUIBundle({
-        url: "./geo-admin-api-swagger.yaml",
+        url: "./swagger.yaml",
         dom_id: "#swagger-ui",
         deepLinking: true,
         presets: [
