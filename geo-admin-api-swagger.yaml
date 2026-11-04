@@ -832,7 +832,7 @@ paths:
   /admin/v1/geo/groups:
     post:
       tags: [Group Management]
-      summary: สร้างกลุ่มพื้นที่ใหม่ (TC_CR_G_001 – TC_CR_G_009)
+      summary: สร้างกลุ่มพื้นที่ใหม่
       operationId: createGroup
       security:
         - BearerAuth: []
@@ -862,42 +862,42 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 invalid_code:
-                  summary: TC_CR_G_004 — รหัส code ผิดรูปแบบ
+                  summary: รหัส code ผิดรูปแบบ
                   value:
                     code: GEO_INVALID_CODE
                     message: "code must match ^[A-Z0-9_]{1,50}$"
                     field: code
                 empty_name_th:
-                  summary: TC_CR_G_006 — name_th ว่างเปล่า
+                  summary: name_th ว่างเปล่า
                   value:
                     code: GEO_INVALID_REQUEST
                     message: name_th is required
                     field: name_th
                 long_name_th:
-                  summary: TC_CR_G_006 — name_th ยาวเกิน 200 ตัวอักษร
+                  summary: name_th ยาวเกิน 200 ตัวอักษร
                   value:
                     code: GEO_INVALID_REQUEST
                     message: name_th is too long
                     field: name_th
                 long_description:
-                  summary: TC_CR_G_006 — description ยาวเกิน 1024 ตัวอักษร
+                  summary: description ยาวเกิน 1024 ตัวอักษร
                   value:
                     code: GEO_INVALID_REQUEST
                     message: description is too long
                     field: description
                 invalid_period:
-                  summary: TC_CR_G_007 — start_at >= end_at
+                  summary: start_at >= end_at
                   value:
                     code: GEO_INVALID_PERIOD
                     message: start_at must be before end_at
                     field: end_at
                 invalid_json_date:
-                  summary: TC_CR_G_008 — รูปแบบวันที่ผิดมาตรฐาน ISO 8601
+                  summary: รูปแบบวันที่ผิดมาตรฐาน ISO 8601
                   value:
                     code: GEO_INVALID_REQUEST
                     message: request body is not valid JSON for this endpoint
                 invalid_status:
-                  summary: TC_CR_G_009 — status นอกเหนือจาก ACTIVE/INACTIVE
+                  summary: status นอกเหนือจาก ACTIVE/INACTIVE
                   value:
                     code: GEO_INVALID_STATUS
                     message: status must be ACTIVE or INACTIVE
@@ -905,7 +905,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '409':
-          description: รหัส `code` ซ้ำกับกลุ่มที่มีอยู่หรือกลุ่มที่ถูก Soft Delete ไปแล้ว (`TC_CR_G_005`)
+          description: รหัส `code` ซ้ำกับกลุ่มที่มีอยู่หรือกลุ่มที่ถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -917,7 +917,7 @@ paths:
 
     get:
       tags: [Group Management]
-      summary: ดึงรายการกลุ่มพื้นที่พร้อมตัวกรองและการแบ่งหน้า (TC_LI_G_001 – TC_LI_G_017, TC_G_BID_007)
+      summary: ดึงรายการกลุ่มพื้นที่พร้อมตัวกรองและการแบ่งหน้า
       operationId: listGroups
       security:
         - BearerAuth: []
@@ -970,26 +970,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/GroupListResponse'
         '400':
-          description: พารามิเตอร์ Query ไม่ถูกต้อง (`TC_LI_G_005`, `TC_LI_G_009`, `TC_LI_G_016`)
+          description: พารามิเตอร์ Query ไม่ถูกต้อง
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 invalid_status:
-                  summary: TC_LI_G_005 — status ไม่ถูกต้อง
+                  summary: status ไม่ถูกต้อง
                   value:
                     code: GEO_INVALID_STATUS
                     message: status must be ACTIVE or INACTIVE
                     field: status
                 invalid_period:
-                  summary: TC_LI_G_009 — period ไม่ถูกต้อง
+                  summary: period ไม่ถูกต้อง
                   value:
                     code: GEO_INVALID_REQUEST
                     message: period must be current, upcoming or expired
                     field: period
                 invalid_page:
-                  summary: TC_LI_G_016 — page น้อยกว่า 1
+                  summary: page น้อยกว่า 1
                   value:
                     code: GEO_INVALID_REQUEST
                     message: page must be 1 or greater
@@ -1000,7 +1000,7 @@ paths:
   /admin/v1/geo/groups/{id}:
     get:
       tags: [Group Management]
-      summary: ดึงรายละเอียดกลุ่มพื้นที่ตาม ID (TC_G_BID_001 – TC_G_BID_008)
+      summary: ดึงรายละเอียดกลุ่มพื้นที่ตาม ID
       operationId: getGroupById
       security:
         - BearerAuth: []
@@ -1018,7 +1018,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GroupDetail'
         '400':
-          description: รหัส `id` ไม่ใช่รูปแบบ UUID (`TC_G_BID_006`)
+          description: รหัส `id` ไม่ใช่รูปแบบ UUID
           content:
             application/json:
               schema:
@@ -1030,7 +1030,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบกลุ่มพื้นที่ หรือกลุ่มพื้นที่ถูก Soft Delete ไปแล้ว (`TC_G_BID_004`, `TC_G_BID_005`)
+          description: ไม่พบกลุ่มพื้นที่ หรือกลุ่มพื้นที่ถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1041,7 +1041,7 @@ paths:
 
     put:
       tags: [Group Management]
-      summary: แก้ไขข้อมูลกลุ่มพื้นที่ตาม ID (TC_P_GID_01 – TC_P_GID_15)
+      summary: แก้ไขข้อมูลกลุ่มพื้นที่ตาม ID
       operationId: updateGroupById
       security:
         - BearerAuth: []
@@ -1065,26 +1065,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/GroupDetail'
         '400':
-          description: พยายามแก้ `code` (`GEO_CODE_IMMUTABLE`) หรือข้อมูลไม่ผ่าน Validation (`TC_P_GID_05`, `TC_P_GID_10`–`TC_P_GID_14`)
+          description: พยายามแก้ `code` (`GEO_CODE_IMMUTABLE`) หรือข้อมูลไม่ผ่าน Validation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 code_immutable:
-                  summary: TC_P_GID_05 — พยายามเปลี่ยนค่า code
+                  summary: พยายามเปลี่ยนค่า code
                   value:
                     code: GEO_CODE_IMMUTABLE
                     message: code cannot be changed
                     field: code
                 invalid_uuid:
-                  summary: TC_P_GID_10 — id ไม่ใช่ UUID
+                  summary: id ไม่ใช่ UUID
                   value:
                     code: GEO_INVALID_REQUEST
                     message: id must be a UUID
                     field: id
                 invalid_period:
-                  summary: TC_P_GID_14 — start_at >= end_at
+                  summary: start_at >= end_at
                   value:
                     code: GEO_INVALID_PERIOD
                     message: start_at must be before end_at
@@ -1092,7 +1092,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบกลุ่มพื้นที่ หรือถูก Soft Delete ไปแล้ว (`TC_P_GID_08`, `TC_P_GID_09`)
+          description: ไม่พบกลุ่มพื้นที่ หรือถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1103,7 +1103,7 @@ paths:
 
     delete:
       tags: [Group Management]
-      summary: ลบกลุ่มพื้นที่แบบ Soft Delete พร้อม Cascade ลบจุดพิกัดภายในกลุ่ม (TC_DL_GID_01 – TC_DL_GID_08)
+      summary: ลบกลุ่มพื้นที่แบบ Soft Delete พร้อม Cascade ลบจุดพิกัดภายในกลุ่ม
       operationId: deleteGroupById
       security:
         - BearerAuth: []
@@ -1119,7 +1119,7 @@ paths:
         '204':
           description: Soft Delete สำเร็จ (No Content)
         '400':
-          description: รหัส `id` ไม่ใช่รูปแบบ UUID (`TC_DL_GID_06`)
+          description: รหัส `id` ไม่ใช่รูปแบบ UUID
           content:
             application/json:
               schema:
@@ -1140,7 +1140,7 @@ paths:
                 code: GEO_GROUP_NOT_FOUND
                 message: group not found
         '409':
-          description: ไม่สามารถลบกลุ่มที่ยังมีสถานะ `ACTIVE` ได้ ต้องเปลี่ยนเป็น `INACTIVE` ก่อน (`TC_DL_GID_04`)
+          description: ไม่สามารถลบกลุ่มที่ยังมีสถานะ `ACTIVE` ได้ ต้องเปลี่ยนเป็น `INACTIVE` ก่อน
           content:
             application/json:
               schema:
@@ -1152,7 +1152,7 @@ paths:
   /admin/v1/geo/groups/{id}/status:
     patch:
       tags: [Group Management]
-      summary: เปลี่ยนสถานะกลุ่มพื้นที่ ACTIVE / INACTIVE (TC_PH_GID_01 – TC_PH_GID_08)
+      summary: เปลี่ยนสถานะกลุ่มพื้นที่ ACTIVE / INACTIVE
       operationId: patchGroupStatus
       security:
         - BearerAuth: []
@@ -1176,7 +1176,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GroupDetail'
         '400':
-          description: ค่า `status` ไม่ถูกต้อง (`TC_PH_GID_04`, `TC_PH_GID_05`)
+          description: ค่า `status` ไม่ถูกต้อง
           content:
             application/json:
               schema:
@@ -1188,7 +1188,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบกลุ่มพื้นที่ หรือถูก Soft Delete ไปแล้ว (`TC_PH_GID_06`, `TC_PH_GID_07`)
+          description: ไม่พบกลุ่มพื้นที่ หรือถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1237,7 +1237,7 @@ paths:
   /admin/v1/geo/locations:
     post:
       tags: [Location Management]
-      summary: สร้างจุดพิกัดร้านค้าใหม่ พร้อมปัดเศษทศนิยม 6 ตำแหน่งและตรวจสอบวงรัศมีทับซ้อน (TC_CR_LOC_01 – TC_CR_LOC_11)
+      summary: สร้างจุดพิกัดร้านค้าใหม่ พร้อมปัดเศษทศนิยม 6 ตำแหน่งและตรวจสอบวงรัศมีทับซ้อน
       operationId: createLocation
       security:
         - BearerAuth: []
@@ -1260,32 +1260,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/LocationDetail'
         '400':
-          description: ข้อมูลพิกัด รัศมี เวลา หรือรหัสไม่ถูกต้อง (`TC_CR_LOC_07` – `TC_CR_LOC_10`)
+          description: ข้อมูลพิกัด รัศมี เวลา หรือรหัสไม่ถูกต้อง
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 invalid_lat:
-                  summary: TC_CR_LOC_08 — พิกัด lat อยู่นอกประเทศไทย
+                  summary: พิกัด lat อยู่นอกประเทศไทย
                   value:
                     code: GEO_INVALID_COORDINATE
                     message: lat must be inside Thailand
                     field: lat
                 invalid_lng:
-                  summary: TC_CR_LOC_08 — พิกัด lng อยู่นอกประเทศไทย
+                  summary: พิกัด lng อยู่นอกประเทศไทย
                   value:
                     code: GEO_INVALID_COORDINATE
                     message: lng must be inside Thailand
                     field: lng
                 invalid_radius:
-                  summary: TC_CR_LOC_09 — radius_m นอกช่วง 100-5000
+                  summary: radius_m นอกช่วง 100-5000
                   value:
                     code: GEO_INVALID_RADIUS
                     message: radius_m must be between 100 and 5000
                     field: radius_m
                 invalid_dwell:
-                  summary: TC_CR_LOC_09 — dwell_seconds นอกช่วง 10-1800
+                  summary: dwell_seconds นอกช่วง 10-1800
                   value:
                     code: GEO_INVALID_DWELL
                     message: dwell_seconds must be between 10 and 1800
@@ -1293,7 +1293,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบ `group_id` ที่ระบุ หรือกลุ่มถูก Soft Delete ไปแล้ว (`TC_CR_LOC_07`, `TC_CR_LOC_10`)
+          description: ไม่พบ `group_id` ที่ระบุ หรือกลุ่มถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1303,7 +1303,7 @@ paths:
                 message: group not found
                 field: group_id
         '409':
-          description: รหัส `code` ของ Location ซ้ำกับที่มีอยู่หรือที่ถูก Soft Delete ไปแล้ว (`TC_CR_LOC_07`)
+          description: รหัส `code` ของ Location ซ้ำกับที่มีอยู่หรือที่ถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1316,7 +1316,7 @@ paths:
   /admin/v1/geo/locations/{id}:
     get:
       tags: [Location Management]
-      summary: ดึงรายละเอียดจุดพิกัดตาม ID (TC_GLO_BID_01 – TC_GLO_BID_05)
+      summary: ดึงรายละเอียดจุดพิกัดตาม ID
       operationId: getLocationById
       security:
         - BearerAuth: []
@@ -1334,7 +1334,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LocationDetail'
         '400':
-          description: รหัส `id` ไม่ใช่ UUID (`TC_GLO_BID_05`)
+          description: รหัส `id` ไม่ใช่ UUID
           content:
             application/json:
               schema:
@@ -1346,7 +1346,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว (`TC_GLO_BID_04`)
+          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1357,7 +1357,7 @@ paths:
 
     put:
       tags: [Location Management]
-      summary: แก้ไขข้อมูลจุดพิกัดตาม ID (TC_PLOC_BID_01 – TC_PLOC_BID_06)
+      summary: แก้ไขข้อมูลจุดพิกัดตาม ID
       operationId: updateLocationById
       security:
         - BearerAuth: []
@@ -1375,13 +1375,13 @@ paths:
               $ref: '#/components/schemas/LocationUpdateRequest'
       responses:
         '200':
-          description: แก้ไขข้อมูลจุดพิกัดสำเร็จ พร้อมแนบ `warnings` หากเกิด `GEO_OVERLAP` (`TC_PLOC_BID_03`)
+          description: แก้ไขข้อมูลจุดพิกัดสำเร็จ พร้อมแนบ `warnings` หากเกิด `GEO_OVERLAP`
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocationDetail'
         '400':
-          description: พยายามแก้ไข `code`/`group_id` (`GEO_CODE_IMMUTABLE`) หรือข้อมูลไม่ผ่าน Validation (`TC_PLOC_BID_04`, `TC_PLOC_BID_05`)
+          description: พยายามแก้ไข `code`/`group_id` (`GEO_CODE_IMMUTABLE`) หรือข้อมูลไม่ผ่าน Validation
           content:
             application/json:
               schema:
@@ -1393,7 +1393,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว (`TC_PLOC_BID_06`)
+          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1404,7 +1404,7 @@ paths:
 
     delete:
       tags: [Location Management]
-      summary: ลบจุดพิกัดรายจุดแบบ Soft Delete (TC_DL_LID_01 – TC_DL_LID_03)
+      summary: ลบจุดพิกัดรายจุดแบบ Soft Delete
       operationId: deleteLocationById
       security:
         - BearerAuth: []
@@ -1420,7 +1420,7 @@ paths:
         '204':
           description: Soft Delete สำเร็จ (No Content)
         '400':
-          description: รหัส `id` ไม่ใช่ UUID (`TC_DL_LID_03`)
+          description: รหัส `id` ไม่ใช่ UUID
           content:
             application/json:
               schema:
@@ -1432,7 +1432,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบจุดพิกัด หรือถูกลบไปแล้ว (`TC_DL_LID_02`)
+          description: ไม่พบจุดพิกัด หรือถูกลบไปแล้ว
           content:
             application/json:
               schema:
@@ -1444,7 +1444,7 @@ paths:
   /admin/v1/geo/locations/{id}/status:
     patch:
       tags: [Location Management]
-      summary: เปลี่ยนสถานะจุดพิกัดรายจุด ACTIVE / INACTIVE (TC_PH_LID_01 – TC_PH_LID_03)
+      summary: เปลี่ยนสถานะจุดพิกัดรายจุด ACTIVE / INACTIVE
       operationId: patchLocationStatus
       security:
         - BearerAuth: []
@@ -1468,7 +1468,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LocationDetail'
         '400':
-          description: ค่า `status` ไม่ถูกต้อง (`TC_PH_LID_02`)
+          description: ค่า `status` ไม่ถูกต้อง
           content:
             application/json:
               schema:
@@ -1480,7 +1480,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
-          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว (`TC_PH_LID_03`)
+          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว
           content:
             application/json:
               schema:
@@ -1495,7 +1495,7 @@ paths:
   /admin/v1/geo/config:
     get:
       tags: [System Configuration]
-      summary: ดึงค่าตั้งค่าระบบกลางล่าสุดครบทั้ง 16 คีย์ (TC_LI_CF_01 – TC_LI_CF_04)
+      summary: ดึงค่าตั้งค่าระบบกลางล่าสุดครบทั้ง 16 คีย์
       operationId: getGeoConfig
       security:
         - BearerAuth: []
@@ -1522,7 +1522,7 @@ paths:
 
     post:
       tags: [System Configuration]
-      summary: บันทึกค่าตั้งค่าระบบกลางทั้งก้อนพร้อมตรวจสอบ Optimistic Lock (TC_UP_CF_01 – TC_UP_CF_12)
+      summary: บันทึกค่าตั้งค่าระบบกลางทั้งก้อนพร้อมตรวจสอบ Optimistic Lock
       operationId: updateGeoConfig
       security:
         - BearerAuth: []
@@ -1545,38 +1545,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfigUpdateResponse'
         '400':
-          description: ค่าตั้งค่าอยู่นอกช่วงที่กำหนด, ส่งคีย์ไม่ครบ, ชนิดข้อมูลผิด, หรือไม่ส่ง `updated_at` (`TC_UP_CF_06` – `TC_UP_CF_11`)
+          description: ค่าตั้งค่าอยู่นอกช่วงที่กำหนด, ส่งคีย์ไม่ครบ, ชนิดข้อมูลผิด, หรือไม่ส่ง `updated_at`
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
                 missing_updated_at:
-                  summary: TC_UP_CF_06 — ไม่ส่ง updated_at
+                  summary: ไม่ส่ง updated_at
                   value:
                     code: GEO_INVALID_CONFIG
                     message: updated_at is required
                     field: updated_at
                 out_of_range:
-                  summary: TC_UP_CF_07 / TC_UP_CF_08 — ค่าตัวเลขอยู่นอกช่วงที่กำหนด
+                  summary: ค่าตัวเลขอยู่นอกช่วงที่กำหนด
                   value:
                     code: GEO_INVALID_CONFIG
                     message: max_poi_per_request is out of range
                     field: max_poi_per_request
                 min_greater_than_max:
-                  summary: TC_UP_CF_09 — tier1_min_radius_m > tier1_max_radius_m
+                  summary: tier1_min_radius_m > tier1_max_radius_m
                   value:
                     code: GEO_INVALID_CONFIG
                     message: tier1_max_radius_m is out of range
                     field: tier1_max_radius_m
                 missing_key:
-                  summary: TC_UP_CF_10 — ส่งคีย์ใน settings มาไม่ครบ
+                  summary: ส่งคีย์ใน settings มาไม่ครบ
                   value:
                     code: GEO_INVALID_CONFIG
                     message: max_poi_per_request is required
                     field: max_poi_per_request
                 invalid_type:
-                  summary: TC_UP_CF_11 — ส่งชนิดข้อมูลผิดประเภท
+                  summary: ส่งชนิดข้อมูลผิดประเภท
                   value:
                     code: GEO_INVALID_CONFIG
                     message: max_poi_per_request must be an integer
@@ -1584,7 +1584,7 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '409':
-          description: ค่า `updated_at` ไม่ตรงกับข้อมูลล่าสุดในฐานข้อมูล เนื่องจากมีผู้ดูแลคนอื่นบันทึกตัดหน้าไปแล้ว (`TC_UP_CF_05`)
+          description: ค่า `updated_at` ไม่ตรงกับข้อมูลล่าสุดในฐานข้อมูล เนื่องจากมีผู้ดูแลคนอื่นบันทึกตัดหน้าไปแล้ว
           content:
             application/json:
               schema:
