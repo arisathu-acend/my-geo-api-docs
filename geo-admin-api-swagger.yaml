@@ -1,0 +1,1595 @@
+openapi: 3.0.3
+info:
+  title: Amaze Geo Fencing Admin & Auth API (AZP-24895 / AZP-25078)
+  version: 1.2.0
+  description: |
+    เอกสารข้อกำหนด OpenAPI 3.0.3 สำหรับระบบ **Geo Fencing Master Data & Admin Portal API** (`amaze-geo-fencing-service`)
+    ปรับปรุงตามผลการทดสอบจริงบนสภาพแวดล้อม **DEV** ครบทั้ง **107 Test Cases** (`[GEO] Test Case 25078`):
+    - **Admin Authentication (`/r4m/v1/auth/*`)**: ขอ `access_token_admin` และดึง `user-id` จาก `/r4m/v1/auth/profile`
+    - **Group Management (`/admin/v1/geo/groups`)**: CRUD กลุ่มพื้นที่แคมเปญ, กรองด้วย `status`, `period` (`current` | `upcoming` | `expired`), `q` (Case-insensitive partial match บน `code`, `name_th`, `name_en`), การแบ่งหน้า `page`/`size`, เปลี่ยนสถานะ `PATCH /status`, และ `DELETE` แบบ Cascade Soft Delete (เฉพาะกลุ่มที่ `INACTIVE`)
+    - **Location Management (`/admin/v1/geo/locations`)**: CRUD จุดพิกัดร้านค้า (POI), ปัดเศษ `lat`/`lng` ทศนิยม 6 ตำแหน่งแบบ Half-up, ตรวจสอบกรอบพิกัดประเทศไทย (`lat: 5.5–20.5`, `lng: 97.3–105.7`), คำนวณค่า `effective_radius_m` และ `effective_dwell_seconds` จากค่ากลางเมื่อเป็น `null`, และแจ้งเตือน `warnings: [{"code": "GEO_OVERLAP", "with": "...", "distance_m": ...}]` เมื่อวงรัศมีทับซ้อนในกลุ่มเดียวกัน
+    - **System Configuration (`/admin/v1/geo/config`)**: ดึงค่าตั้งค่าระบบกลาง 16 คีย์ (`GET`) และบันทึกค่าตั้งค่ากลางทั้งก้อนภายใต้อ็อบเจกต์ `settings` พร้อม `updated_at` (`POST`) เพื่อตรวจสอบ Optimistic Concurrency Control (`409 GEO_CONFLICT`)
+
+servers:
+  - url: http://geo-fencing-api.dev-ngw.amaze-x.com
+    description: DEV — Geo Fencing Service (NGW Endpoint)
+  - url: http://geo-fencing-api.uat-ngw.amaze-x.com
+    description: UAT — Geo Fencing Service (NGW Endpoint)
+  - url: https://dev-admin-api.amaze-x.com
+    description: DEV — Admin Portal Auth API Gateway
+  - url: https://uat-admin-api.amaze-x.com
+    description: UAT — Admin Portal Auth API Gateway
+
+tags:
+  - name: Admin Auth
+    description: APIs สำหรับเข้าสู่ระบบผู้ดูแล (Login) และดึงข้อมูลโปรไฟล์ (`user-id`)
+  - name: Group Management
+    description: APIs สำหรับการจัดการกลุ่มพื้นที่แคมเปญ (CRUD Groups และสถานะ)
+  - name: Location Management
+    description: APIs สำหรับการจัดการจุดพิกัดรัศมีร้านค้า (CRUD Locations, Overlap Check และสถานะ)
+  - name: System Configuration
+    description: APIs สำหรับดูและปรับปรุงการตั้งค่าระบบกลาง (System Configs 16 Keys & Optimistic Lock)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin JWT Access Token ที่ได้รับจาก `POST /r4m/v1/auth/login`
+
+  parameters:
+    UserIdHeader:
+      name: User-ID
+      in: header
+      required: true
+      description: รหัสผู้ใช้งาน Admin (ตัวเลข เช่น `478`) ที่ได้จาก `GET /r4m/v1/auth/profile` หากไม่แนบจะถูกปฏิเสธด้วย `401 GEO_UNAUTHORIZED (missing User-Id header)`
+      schema:
+        type: string
+        example: "478"
+    AdminIdHeader:
+      name: admin_id
+      in: header
+      required: false
+      description: รหัสผู้ดูแลระบบจาก Kong Admin Gateway (เช่น `admin_01`)
+      schema:
+        type: string
+        default: admin_01
+        example: admin_01
+    OriginHeader:
+      name: origin
+      in: header
+      required: false
+      description: Origin ของระบบ Admin Portal (`https://dev-a2c.amaze-x.com` หรือ `https://uat-a2c.amaze-x.com`)
+      schema:
+        type: string
+        default: https://dev-a2c.amaze-x.com
+        example: https://dev-a2c.amaze-x.com
+    SaleChannelHeader:
+      name: sale-channel
+      in: header
+      required: false
+      description: ช่องทางการขาย (`amaze`)
+      schema:
+        type: string
+        default: amaze
+        example: amaze
+    PathId:
+      name: id
+      in: path
+      required: true
+      description: รหัสอ้างอิง UUID ของรายการ (หากไม่ใช่รูปแบบ UUID จะคืน `400 GEO_INVALID_REQUEST` `id must be a UUID`)
+      schema:
+        type: string
+        format: uuid
+        example: f57ff6c9-f03d-444e-9721-de76eb299144
+
+  schemas:
+    AdminLoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          format: email
+          example: arisa.thu@ascendcorp.com
+        password:
+          type: string
+          format: password
+          example: "********"
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        status:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+              description: "Admin JWT Token สำหรับใช้ใน Header `Authorization: Bearer <token>`"
+              example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+            refresh_token:
+              type: string
+            expires_in:
+              type: integer
+              example: 3600
+
+    AdminProfileResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        status:
+          type: string
+          example: success
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+              description: รหัส `user-id` สำหรับส่งใน Header `User-ID`
+              example: 478
+            user_id:
+              type: integer
+              example: 478
+            username:
+              type: string
+              example: arisa.thu@ascendcorp.com
+            email:
+              type: string
+              example: arisa.thu@ascendcorp.com
+
+    GroupCreateRequest:
+      type: object
+      required:
+        - code
+        - name_th
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z0-9_]{1,50}$'
+          minLength: 1
+          maxLength: 50
+          description: รหัสกลุ่มพื้นที่ พิมพ์ใหญ่ ตัวเลข และ `_` เท่านั้น (1-50 ตัวอักษร) ห้ามซ้ำรวมถึงแถวที่ถูก Soft Delete ไปแล้ว และห้ามแก้ไขหลังสร้าง
+          example: SIAM_PREMIUM
+        name_th:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: ชื่อกลุ่มภาษาไทย (บังคับกรอก 1-200 ตัวอักษร ห้ามเป็นค่าว่างหรือ Whitespace ล้วน)
+          example: สยามพรีเมียร์
+        name_en:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: ชื่อกลุ่มภาษาอังกฤษ (ไม่เกิน 200 ตัวอักษร)
+          example: Siam Premium
+        description:
+          type: string
+          nullable: true
+          maxLength: 1024
+          description: รายละเอียดกลุ่มพื้นที่ (ไม่เกิน 1,024 ตัวอักษร)
+          example: ศูนย์การค้าเอาท์เล็ท
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          default: ACTIVE
+          description: สถานะของกลุ่มพื้นที่ (`ACTIVE` หรือ `INACTIVE` เท่านั้น ตัวพิมพ์ใหญ่)
+          example: ACTIVE
+        start_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: วันเวลาเริ่มต้นแคมเปญตามมาตรฐาน ISO 8601 (`null` = ไม่จำกัดเวลาเริ่ม) ต้องน้อยกว่า `end_at`
+          example: "2026-11-03T04:26:42.053Z"
+        end_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: วันเวลาสิ้นสุดแคมเปญตามมาตรฐาน ISO 8601 (`null` = ไม่จำกัดเวลาสิ้นสุด) ต้องมากกว่า `start_at`
+          example: "2026-11-30T04:26:42.053Z"
+
+    GroupUpdateRequest:
+      type: object
+      required:
+        - name_th
+      properties:
+        code:
+          type: string
+          description: ห้ามเปลี่ยนค่า `code` ให้ต่างจากเดิม (หากส่งค่าเดิมมาอนุญาตให้ผ่านได้ แต่หากส่งค่าใหม่จะคืน `400 GEO_CODE_IMMUTABLE`)
+          example: GROUP_GID1
+        name_th:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: update name th GROUP_GID1
+        name_en:
+          type: string
+          nullable: true
+          maxLength: 200
+          example: update name en GROUP_GID1
+        description:
+          type: string
+          nullable: true
+          maxLength: 1024
+          example: update description GROUP_GID1
+        start_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-04T03:18:50.276Z"
+        end_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-05T03:18:50.276Z"
+
+    StatusPatchRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          description: สถานะที่ต้องการเปลี่ยน (`ACTIVE` หรือ `INACTIVE` เท่านั้น)
+          example: INACTIVE
+
+    GroupDetail:
+      type: object
+      required:
+        - id
+        - code
+        - name_th
+        - status
+        - locations_count
+        - created_by
+        - updated_by
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: f57ff6c9-f03d-444e-9721-de76eb299144
+        code:
+          type: string
+          example: GROUP_A
+        name_th:
+          type: string
+          example: name th group a
+        name_en:
+          type: string
+          nullable: true
+          example: name en group a
+        description:
+          type: string
+          nullable: true
+          example: description group a
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          example: ACTIVE
+        start_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-04T04:26:42.053Z"
+        end_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-07T04:26:42.053Z"
+        locations_count:
+          type: integer
+          minimum: 0
+          description: จำนวนจุดพิกัดภายในกลุ่มที่ยังไม่ถูกลบ (`deleted_at IS NULL`)
+          example: 3
+        created_by:
+          type: string
+          description: รหัสผู้สร้าง (บันทึกค่า `User-ID` เช่น `"478"`)
+          example: "478"
+        updated_by:
+          type: string
+          description: รหัสผู้แก้ไขล่าสุด (บันทึกค่า `User-ID` เช่น `"478"`)
+          example: "478"
+        updated_by_name:
+          type: string
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-04T02:35:35.906159Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-11-04T02:35:35.906159Z"
+
+    GroupListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupDetail'
+        total:
+          type: integer
+          example: 4
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        size:
+          type: integer
+          minimum: 1
+          example: 10
+
+    OverlapWarning:
+      type: object
+      required:
+        - code
+        - with
+        - distance_m
+      properties:
+        code:
+          type: string
+          enum: [GEO_OVERLAP]
+          example: GEO_OVERLAP
+        with:
+          type: string
+          description: รหัส `code` ของจุดพิกัดอื่นในกลุ่มเดียวกันที่วงรัศมีทับซ้อนกัน (`distance < r1 + r2`)
+          example: LOCATION1_LOC05
+        distance_m:
+          type: number
+          description: ระยะห่างระหว่างจุดศูนย์กลางทั้งสอง (เมตร)
+          example: 0
+
+    LocationCreateRequest:
+      type: object
+      required:
+        - group_id
+        - code
+        - name_th
+        - lat
+        - lng
+      properties:
+        group_id:
+          type: string
+          format: uuid
+          description: UUID ของกลุ่มพื้นที่ (`geo_groups.id` ที่ยังไม่ถูก Soft Delete) ห้ามแก้ไขหลังสร้าง
+          example: 6b4caede-c43f-4292-86b5-93684b6b823f
+        code:
+          type: string
+          pattern: '^[A-Z0-9_]{1,50}$'
+          minLength: 1
+          maxLength: 50
+          description: รหัสจุดพิกัด (`^[A-Z0-9_]{1,50}$`) ห้ามซ้ำรวมถึงแถวที่ถูกลบไปแล้ว และห้ามแก้ไขหลังสร้าง
+          example: L1_G_LOC_01
+        name_th:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: name th L1_G_LOC_01
+        name_en:
+          type: string
+          nullable: true
+          maxLength: 200
+          example: name en L1_G_LOC_01
+        lat:
+          type: number
+          format: double
+          minimum: 5.5
+          maximum: 20.5
+          description: ละติจูดภายในประเทศไทย (`5.5` ถึง `20.5`) ระบบปัดเศษทศนิยม 6 ตำแหน่งแบบ Half-up อัตโนมัติ
+          example: 13.7462005
+        lng:
+          type: number
+          format: double
+          minimum: 97.3
+          maximum: 105.7
+          description: ลองจิจูดภายในประเทศไทย (`97.3` ถึง `105.7`) ระบบปัดเศษทศนิยม 6 ตำแหน่งแบบ Half-up อัตโนมัติ
+          example: 100.5347004
+        radius_m:
+          type: integer
+          nullable: true
+          minimum: 100
+          maximum: 5000
+          description: รัศมี (เมตร) จำนวนเต็ม `100–5000` หากเป็น `null` หรือไม่ส่งจะใช้ค่า `default_poi_radius_m` จาก `geo_configs`
+          example: 200
+        dwell_seconds:
+          type: integer
+          nullable: true
+          minimum: 10
+          maximum: 1800
+          description: เวลาขั้นต่ำที่อยู่ในพื้นที่ (วินาที) จำนวนเต็ม `10–1800` หากเป็น `null` หรือไม่ส่งจะใช้ค่า `default_dwell_seconds` จาก `geo_configs`
+          example: 120
+        address:
+          type: string
+          nullable: true
+          example: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          default: ACTIVE
+          example: ACTIVE
+
+    LocationUpdateRequest:
+      type: object
+      required:
+        - name_th
+        - lat
+        - lng
+      properties:
+        name_th:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: update name th LO1_GROUP_PBID_1
+        name_en:
+          type: string
+          nullable: true
+          maxLength: 200
+          example: update name en LO1_GROUP_PBID_1
+        lat:
+          type: number
+          format: double
+          minimum: 5.5
+          maximum: 20.5
+          example: 12.01
+        lng:
+          type: number
+          format: double
+          minimum: 97.3
+          maximum: 105.7
+          example: 102.01
+        radius_m:
+          type: integer
+          nullable: true
+          minimum: 100
+          maximum: 5000
+          example: 200
+        dwell_seconds:
+          type: integer
+          nullable: true
+          minimum: 10
+          maximum: 1800
+          example: 200
+        address:
+          type: string
+          nullable: true
+          example: update
+
+    LocationDetail:
+      type: object
+      required:
+        - id
+        - group_id
+        - code
+        - name_th
+        - lat
+        - lng
+        - effective_radius_m
+        - effective_dwell_seconds
+        - status
+        - created_by
+        - updated_by
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 3632294c-258a-4b30-8fd3-1fce814f0dc4
+        group_id:
+          type: string
+          format: uuid
+          example: 6b4caede-c43f-4292-86b5-93684b6b823f
+        code:
+          type: string
+          example: L1_G_LOC_01
+        name_th:
+          type: string
+          example: name th L1_G_LOC_01
+        name_en:
+          type: string
+          nullable: true
+          example: name en L1_G_LOC_01
+        lat:
+          type: number
+          format: double
+          example: 13.746201
+        lng:
+          type: number
+          format: double
+          example: 100.5347
+        radius_m:
+          type: integer
+          nullable: true
+          example: 200
+        dwell_seconds:
+          type: integer
+          nullable: true
+          example: 120
+        effective_radius_m:
+          type: integer
+          description: ค่า `radius_m` ที่ใช้จริง (หาก `radius_m` เป็น `null` จะดึงค่า `default_poi_radius_m` ล่าสุดจาก `geo_configs`)
+          example: 200
+        effective_dwell_seconds:
+          type: integer
+          description: ค่า `dwell_seconds` ที่ใช้จริง (หาก `dwell_seconds` เป็น `null` จะดึงค่า `default_dwell_seconds` ล่าสุดจาก `geo_configs`)
+          example: 120
+        address:
+          type: string
+          nullable: true
+          example: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          example: ACTIVE
+        created_by:
+          type: string
+          example: "478"
+        updated_by:
+          type: string
+          example: "478"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-04T09:46:22.6473Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-11-04T09:46:22.6473Z"
+        warnings:
+          type: array
+          description: แสดงเฉพาะเมื่อเกิดวงรัศมีทับซ้อนกับจุดอื่นใน Group เดียวกัน (`distance < r1 + r2`)
+          items:
+            $ref: '#/components/schemas/OverlapWarning'
+
+    ConfigSettingsPayload:
+      type: object
+      required:
+        - feature_enabled
+        - max_poi_per_request
+        - tier1_min_radius_m
+        - tier1_max_radius_m
+        - default_poi_radius_m
+        - default_dwell_seconds
+        - dwell_tolerance_seconds
+        - event_cooldown_minutes
+        - refresh_after_seconds
+        - poi_enter_min_interval_seconds
+        - max_accuracy_m
+        - max_events_per_day
+        - rate_limit_per_hour
+        - reject_mock_location
+        - allow_simulated_events
+      properties:
+        feature_enabled:
+          type: boolean
+          description: Kill switch เปิด/ปิดฟีเจอร์ Geo Fencing ทั้งระบบ (PROD Seed = `false`)
+          example: false
+        max_poi_per_request:
+          type: integer
+          minimum: 1
+          maximum: 15
+          description: จำนวนจุด POI สูงสุดต่อการเรียก (`1–15`, PROD Seed = `15`)
+          example: 15
+        tier1_min_radius_m:
+          type: integer
+          minimum: 500
+          maximum: 5000
+          description: รัศมีขั้นต่ำของวงใหญ่ Tier 1 (`500–5000` และต้อง `<= tier1_max_radius_m`, PROD Seed = `1000`)
+          example: 1000
+        tier1_max_radius_m:
+          type: integer
+          minimum: 5000
+          maximum: 100000
+          description: รัศมีสูงสุดของวงใหญ่ Tier 1 (`5000–100000` และต้อง `>= tier1_min_radius_m`, PROD Seed = `30000`)
+          example: 30000
+        default_poi_radius_m:
+          type: integer
+          minimum: 100
+          maximum: 5000
+          description: รัศมีเริ่มต้นของจุดพิกัดเมื่อ `radius_m` เป็น `null` (`100–5000`, PROD Seed = `200`)
+          example: 200
+        default_dwell_seconds:
+          type: integer
+          minimum: 10
+          maximum: 1800
+          description: เวลา Dwell เริ่มต้นเมื่อ `dwell_seconds` เป็น `null` (`10–1800`, PROD Seed = `120`)
+          example: 120
+        dwell_tolerance_seconds:
+          type: integer
+          minimum: 0
+          maximum: 60
+          description: ค่าความคลาดเคลื่อนเวลา Dwell ที่ยอมรับได้ (`0–60`, PROD Seed = `15`)
+          example: 15
+        event_cooldown_minutes:
+          type: integer
+          minimum: 1
+          maximum: 10080
+          description: Cooldown ก่อนนับซ้ำที่ร้านเดิม (`1–10080` นาที, PROD Seed = `360`)
+          example: 360
+        refresh_after_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+          description: อายุชุดพิกัดในแอปก่อนต้องซิงค์ใหม่ (`60–604800` วินาที, PROD Seed = `86400`)
+          example: 86400
+        poi_enter_min_interval_seconds:
+          type: integer
+          minimum: 0
+          maximum: 600
+          description: ระยะเวลาขั้นต่ำระหว่างการซิงค์เมื่อเข้าจุด (`0–600` วินาที, PROD Seed = `60`)
+          example: 60
+        max_accuracy_m:
+          type: integer
+          minimum: 20
+          maximum: 1000
+          description: ความคลาดเคลื่อน GPS สูงสุดที่ยอมรับได้ (`20–1000` เมตร, PROD Seed = `150`)
+          example: 150
+        max_events_per_day:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: จำนวน Event สูงสุดต่อคนต่อวัน (`1–100`, PROD Seed = `10`)
+          example: 10
+        rate_limit_per_hour:
+          type: integer
+          minimum: 10
+          maximum: 10000
+          description: เพดานการเรียก API สูงสุดต่อคนต่อชั่วโมง (`10–10000`, PROD Seed = `120`)
+          example: 120
+        reject_mock_location:
+          type: boolean
+          description: ปฏิเสธพิกัดจำลอง (PROD Seed = `true`)
+          example: true
+        allow_simulated_events:
+          type: boolean
+          description: อนุญาต Event จำลองสำหรับทดสอบ (PROD Seed = `false`)
+          example: false
+
+    ConfigGetResponse:
+      allOf:
+        - $ref: '#/components/schemas/ConfigSettingsPayload'
+        - type: object
+          required:
+            - geo_version
+            - updated_at
+          properties:
+            geo_version:
+              type: integer
+              description: เลขเวอร์ชันข้อมูลกลางที่เพิ่มขึ้น `+1` ทุกครั้งที่มีการเขียนข้อมูลลง `geo_groups`, `geo_locations`, หรือ `geo_configs`
+              example: 1
+            updated_at:
+              type: string
+              format: date-time
+              description: เวลาแก้ไขล่าสุดของ Config สำหรับนำไปส่งกลับใน `POST /admin/v1/geo/config` (Optimistic Lock)
+              example: "2026-10-27T10:00:00Z"
+
+    ConfigUpdateRequest:
+      type: object
+      required:
+        - settings
+        - updated_at
+      description: โครงสร้าง Request Body บน DEV สำหรับ `POST /admin/v1/geo/config` ต้องส่งคีย์ตั้งค่าทั้ง 15 คีย์ภายใต้ `settings` พร้อม `updated_at` ล่าสุด
+      properties:
+        settings:
+          $ref: '#/components/schemas/ConfigSettingsPayload'
+        updated_at:
+          type: string
+          format: date-time
+          description: เวลา `updated_at` ล่าสุดที่อ่านได้จาก `GET /admin/v1/geo/config`
+          example: "2026-11-03T05:05:03.107212Z"
+
+    ConfigUpdateResponse:
+      type: object
+      properties:
+        settings:
+          $ref: '#/components/schemas/ConfigSettingsPayload'
+        geo_version:
+          type: integer
+          example: 2
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-11-04T14:00:00.000Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - GEO_INVALID_REQUEST
+            - GEO_INVALID_CODE
+            - GEO_INVALID_STATUS
+            - GEO_INVALID_PERIOD
+            - GEO_CODE_IMMUTABLE
+            - GEO_INVALID_COORDINATE
+            - GEO_INVALID_RADIUS
+            - GEO_INVALID_DWELL
+            - GEO_INVALID_CONFIG
+            - GEO_GROUP_NOT_FOUND
+            - GEO_LOCATION_NOT_FOUND
+            - GEO_GROUP_CODE_DUPLICATED
+            - GEO_LOCATION_CODE_DUPLICATED
+            - GEO_GROUP_ACTIVE
+            - GEO_CONFLICT
+          example: GEO_INVALID_CODE
+        message:
+          type: string
+          example: "code must match ^[A-Z0-9_]{1,50}$"
+        field:
+          type: string
+          nullable: true
+          example: code
+
+    UnauthorizedErrorResponse:
+      type: object
+      required:
+        - code
+        - err_code
+        - status
+        - message
+      properties:
+        code:
+          type: integer
+          example: 401
+        err_code:
+          type: string
+          example: GEO_UNAUTHORIZED
+        status:
+          type: string
+          example: unauthorized
+        message:
+          type: string
+          example: missing User-Id header
+        errors:
+          type: object
+          nullable: true
+          example: null
+
+  responses:
+    UnauthorizedError:
+      description: 401 Unauthorized — ไม่ได้แนบ `User-ID` Header, ไม่มีสิทธิ์ Admin หรือใช้ Token ฝั่งลูกค้า
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnauthorizedErrorResponse'
+          example:
+            code: 401
+            err_code: GEO_UNAUTHORIZED
+            status: unauthorized
+            message: missing User-Id header
+            errors: null
+
+paths:
+  # ==========================================================================
+  # 0. ADMIN AUTHENTICATION (/r4m/v1/auth/*)
+  # ==========================================================================
+  /r4m/v1/auth/login:
+    post:
+      tags: [Admin Auth]
+      summary: เข้าสู่ระบบ Admin เพื่อรับ access_token_admin
+      operationId: adminLogin
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: เข้าสู่ระบบสำเร็จ คืนค่า `access_token`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginResponse'
+
+  /r4m/v1/auth/profile:
+    get:
+      tags: [Admin Auth]
+      summary: ดึงข้อมูลโปรไฟล์ผู้ดูแลระบบเพื่อรับค่า User-ID
+      operationId: getAdminProfile
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: ดึงข้อมูลโปรไฟล์สำเร็จ คืนค่า `id` / `user_id` (เช่น `478`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProfileResponse'
+
+  # ==========================================================================
+  # 1. GROUP MANAGEMENT (/admin/v1/geo/groups)
+  # ==========================================================================
+  /admin/v1/geo/groups:
+    post:
+      tags: [Group Management]
+      summary: สร้างกลุ่มพื้นที่ใหม่ (TC_CR_G_001 – TC_CR_G_009)
+      operationId: createGroup
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupCreateRequest'
+      responses:
+        '201':
+          description: สร้างกลุ่มพื้นที่สำเร็จ (`201 Created`), บันทึก `geo_audit_logs` และเพิ่ม `geo_version + 1`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '400':
+          description: ข้อมูลไม่ผ่านการตรวจสอบ (เช่น `GEO_INVALID_CODE`, `GEO_INVALID_REQUEST`, `GEO_INVALID_PERIOD`, `GEO_INVALID_STATUS`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_code:
+                  summary: TC_CR_G_004 — รหัส code ผิดรูปแบบ
+                  value:
+                    code: GEO_INVALID_CODE
+                    message: "code must match ^[A-Z0-9_]{1,50}$"
+                    field: code
+                empty_name_th:
+                  summary: TC_CR_G_006 — name_th ว่างเปล่า
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: name_th is required
+                    field: name_th
+                long_name_th:
+                  summary: TC_CR_G_006 — name_th ยาวเกิน 200 ตัวอักษร
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: name_th is too long
+                    field: name_th
+                long_description:
+                  summary: TC_CR_G_006 — description ยาวเกิน 1024 ตัวอักษร
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: description is too long
+                    field: description
+                invalid_period:
+                  summary: TC_CR_G_007 — start_at >= end_at
+                  value:
+                    code: GEO_INVALID_PERIOD
+                    message: start_at must be before end_at
+                    field: end_at
+                invalid_json_date:
+                  summary: TC_CR_G_008 — รูปแบบวันที่ผิดมาตรฐาน ISO 8601
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: request body is not valid JSON for this endpoint
+                invalid_status:
+                  summary: TC_CR_G_009 — status นอกเหนือจาก ACTIVE/INACTIVE
+                  value:
+                    code: GEO_INVALID_STATUS
+                    message: status must be ACTIVE or INACTIVE
+                    field: status
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          description: รหัส `code` ซ้ำกับกลุ่มที่มีอยู่หรือกลุ่มที่ถูก Soft Delete ไปแล้ว (`TC_CR_G_005`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_CODE_DUPLICATED
+                message: code นี้เคยใช้แล้ว
+                field: code
+
+    get:
+      tags: [Group Management]
+      summary: ดึงรายการกลุ่มพื้นที่พร้อมตัวกรองและการแบ่งหน้า (TC_LI_G_001 – TC_LI_G_017, TC_G_BID_007)
+      operationId: listGroups
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+        - name: status
+          in: query
+          required: false
+          description: กรองตามสถานะ (`ACTIVE` หรือ `INACTIVE`)
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+        - name: period
+          in: query
+          required: false
+          description: กรองตามช่วงเวลาแคมเปญ (`current`, `upcoming`, `expired`)
+          schema:
+            type: string
+            enum: [current, upcoming, expired]
+        - name: q
+          in: query
+          required: false
+          description: คำค้นหาแบบ Partial Match & Case-Insensitive บนฟิลด์ `code`, `name_th`, `name_en`
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          description: หน้าที่ต้องการ (เริ่มต้น `1`, ต้อง `>= 1`)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: size
+          in: query
+          required: false
+          description: จำนวนรายการต่อหน้า (เริ่มต้น `10`, ต้อง `>= 1`)
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+      responses:
+        '200':
+          description: คืนรายการกลุ่มพื้นที่เรียงตาม `updated_at DESC` (ไม่รวมรายการที่ถูก Soft Delete)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupListResponse'
+        '400':
+          description: พารามิเตอร์ Query ไม่ถูกต้อง (`TC_LI_G_005`, `TC_LI_G_009`, `TC_LI_G_016`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_status:
+                  summary: TC_LI_G_005 — status ไม่ถูกต้อง
+                  value:
+                    code: GEO_INVALID_STATUS
+                    message: status must be ACTIVE or INACTIVE
+                    field: status
+                invalid_period:
+                  summary: TC_LI_G_009 — period ไม่ถูกต้อง
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: period must be current, upcoming or expired
+                    field: period
+                invalid_page:
+                  summary: TC_LI_G_016 — page น้อยกว่า 1
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: page must be 1 or greater
+                    field: page
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /admin/v1/geo/groups/{id}:
+    get:
+      tags: [Group Management]
+      summary: ดึงรายละเอียดกลุ่มพื้นที่ตาม ID (TC_G_BID_001 – TC_G_BID_008)
+      operationId: getGroupById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: คืนรายละเอียดของกลุ่มพื้นที่พร้อม `locations_count`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '400':
+          description: รหัส `id` ไม่ใช่รูปแบบ UUID (`TC_G_BID_006`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_INVALID_REQUEST
+                message: id must be a UUID
+                field: id
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบกลุ่มพื้นที่ หรือกลุ่มพื้นที่ถูก Soft Delete ไปแล้ว (`TC_G_BID_004`, `TC_G_BID_005`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_NOT_FOUND
+                message: group not found
+
+    put:
+      tags: [Group Management]
+      summary: แก้ไขข้อมูลกลุ่มพื้นที่ตาม ID (TC_P_GID_01 – TC_P_GID_15)
+      operationId: updateGroupById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupUpdateRequest'
+      responses:
+        '200':
+          description: แก้ไขข้อมูลกลุ่มสำเร็จ บันทึก `geo_audit_logs` และเพิ่ม `geo_version + 1`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '400':
+          description: พยายามแก้ `code` (`GEO_CODE_IMMUTABLE`) หรือข้อมูลไม่ผ่าน Validation (`TC_P_GID_05`, `TC_P_GID_10`–`TC_P_GID_14`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                code_immutable:
+                  summary: TC_P_GID_05 — พยายามเปลี่ยนค่า code
+                  value:
+                    code: GEO_CODE_IMMUTABLE
+                    message: code cannot be changed
+                    field: code
+                invalid_uuid:
+                  summary: TC_P_GID_10 — id ไม่ใช่ UUID
+                  value:
+                    code: GEO_INVALID_REQUEST
+                    message: id must be a UUID
+                    field: id
+                invalid_period:
+                  summary: TC_P_GID_14 — start_at >= end_at
+                  value:
+                    code: GEO_INVALID_PERIOD
+                    message: start_at must be before end_at
+                    field: end_at
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบกลุ่มพื้นที่ หรือถูก Soft Delete ไปแล้ว (`TC_P_GID_08`, `TC_P_GID_09`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_NOT_FOUND
+                message: group not found
+
+    delete:
+      tags: [Group Management]
+      summary: ลบกลุ่มพื้นที่แบบ Soft Delete พร้อม Cascade ลบจุดพิกัดภายในกลุ่ม (TC_DL_GID_01 – TC_DL_GID_08)
+      operationId: deleteGroupById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: Soft Delete กลุ่มพื้นที่และจุดพิกัดที่ยังไม่ถูกลบภายในกลุ่มสำเร็จ
+        '204':
+          description: Soft Delete สำเร็จ (No Content)
+        '400':
+          description: รหัส `id` ไม่ใช่รูปแบบ UUID (`TC_DL_GID_06`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_INVALID_REQUEST
+                message: id must be a UUID
+                field: id
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบกลุ่มพื้นที่ หรือถูกลบไปแล้ว
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_NOT_FOUND
+                message: group not found
+        '409':
+          description: ไม่สามารถลบกลุ่มที่ยังมีสถานะ `ACTIVE` ได้ ต้องเปลี่ยนเป็น `INACTIVE` ก่อน (`TC_DL_GID_04`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_ACTIVE
+                message: group must be INACTIVE before deleting
+
+  /admin/v1/geo/groups/{id}/status:
+    patch:
+      tags: [Group Management]
+      summary: เปลี่ยนสถานะกลุ่มพื้นที่ ACTIVE / INACTIVE (TC_PH_GID_01 – TC_PH_GID_08)
+      operationId: patchGroupStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusPatchRequest'
+      responses:
+        '200':
+          description: เปลี่ยนสถานะกลุ่มพื้นที่สำเร็จ (ไม่กระทบค่า `status` เดิมของแต่ละ Location ในตาราง `geo_locations`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '400':
+          description: ค่า `status` ไม่ถูกต้อง (`TC_PH_GID_04`, `TC_PH_GID_05`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_INVALID_STATUS
+                message: status must be ACTIVE or INACTIVE
+                field: status
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบกลุ่มพื้นที่ หรือถูก Soft Delete ไปแล้ว (`TC_PH_GID_06`, `TC_PH_GID_07`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_NOT_FOUND
+                message: group not found
+
+  /admin/v1/geo/groups/{id}/locations:
+    get:
+      tags: [Group Management]
+      summary: ดึงรายการจุดพิกัดทั้งหมดภายในกลุ่มพื้นที่ (สูงสุด <= 1,000 จุด/กลุ่ม)
+      operationId: listGroupLocations
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: คืนรายการจุดพิกัดในกลุ่มพร้อมค่า `effective_radius_m` และ `effective_dwell_seconds`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LocationDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบกลุ่มพื้นที่
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================================================
+  # 2. LOCATION MANAGEMENT (/admin/v1/geo/locations)
+  # ==========================================================================
+  /admin/v1/geo/locations:
+    post:
+      tags: [Location Management]
+      summary: สร้างจุดพิกัดร้านค้าใหม่ พร้อมปัดเศษทศนิยม 6 ตำแหน่งและตรวจสอบวงรัศมีทับซ้อน (TC_CR_LOC_01 – TC_CR_LOC_11)
+      operationId: createLocation
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationCreateRequest'
+      responses:
+        '201':
+          description: สร้างจุดพิกัดสำเร็จ (`201 Created`) พร้อมแนบ `warnings` หากวงรัศมีทับซ้อนกับจุดอื่นในกลุ่มเดียวกัน
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationDetail'
+        '400':
+          description: ข้อมูลพิกัด รัศมี เวลา หรือรหัสไม่ถูกต้อง (`TC_CR_LOC_07` – `TC_CR_LOC_10`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_lat:
+                  summary: TC_CR_LOC_08 — พิกัด lat อยู่นอกประเทศไทย
+                  value:
+                    code: GEO_INVALID_COORDINATE
+                    message: lat must be inside Thailand
+                    field: lat
+                invalid_lng:
+                  summary: TC_CR_LOC_08 — พิกัด lng อยู่นอกประเทศไทย
+                  value:
+                    code: GEO_INVALID_COORDINATE
+                    message: lng must be inside Thailand
+                    field: lng
+                invalid_radius:
+                  summary: TC_CR_LOC_09 — radius_m นอกช่วง 100-5000
+                  value:
+                    code: GEO_INVALID_RADIUS
+                    message: radius_m must be between 100 and 5000
+                    field: radius_m
+                invalid_dwell:
+                  summary: TC_CR_LOC_09 — dwell_seconds นอกช่วง 10-1800
+                  value:
+                    code: GEO_INVALID_DWELL
+                    message: dwell_seconds must be between 10 and 1800
+                    field: dwell_seconds
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบ `group_id` ที่ระบุ หรือกลุ่มถูก Soft Delete ไปแล้ว (`TC_CR_LOC_07`, `TC_CR_LOC_10`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_GROUP_NOT_FOUND
+                message: group not found
+                field: group_id
+        '409':
+          description: รหัส `code` ของ Location ซ้ำกับที่มีอยู่หรือที่ถูก Soft Delete ไปแล้ว (`TC_CR_LOC_07`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_LOCATION_CODE_DUPLICATED
+                message: code นี้เคยใช้แล้ว
+                field: code
+
+  /admin/v1/geo/locations/{id}:
+    get:
+      tags: [Location Management]
+      summary: ดึงรายละเอียดจุดพิกัดตาม ID (TC_GLO_BID_01 – TC_GLO_BID_05)
+      operationId: getLocationById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: คืนรายละเอียดจุดพิกัดพร้อมค่า `effective_radius_m` และ `effective_dwell_seconds`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationDetail'
+        '400':
+          description: รหัส `id` ไม่ใช่ UUID (`TC_GLO_BID_05`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_INVALID_REQUEST
+                message: id must be a UUID
+                field: id
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว (`TC_GLO_BID_04`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_LOCATION_NOT_FOUND
+                message: location not found
+
+    put:
+      tags: [Location Management]
+      summary: แก้ไขข้อมูลจุดพิกัดตาม ID (TC_PLOC_BID_01 – TC_PLOC_BID_06)
+      operationId: updateLocationById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationUpdateRequest'
+      responses:
+        '200':
+          description: แก้ไขข้อมูลจุดพิกัดสำเร็จ พร้อมแนบ `warnings` หากเกิด `GEO_OVERLAP` (`TC_PLOC_BID_03`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationDetail'
+        '400':
+          description: พยายามแก้ไข `code`/`group_id` (`GEO_CODE_IMMUTABLE`) หรือข้อมูลไม่ผ่าน Validation (`TC_PLOC_BID_04`, `TC_PLOC_BID_05`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_CODE_IMMUTABLE
+                message: code cannot be changed
+                field: code
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว (`TC_PLOC_BID_06`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_LOCATION_NOT_FOUND
+                message: location not found
+
+    delete:
+      tags: [Location Management]
+      summary: ลบจุดพิกัดรายจุดแบบ Soft Delete (TC_DL_LID_01 – TC_DL_LID_03)
+      operationId: deleteLocationById
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: Soft Delete จุดพิกัดสำเร็จ (ต้องมีสถานะ `INACTIVE` ก่อนลบ) และลดค่า `locations_count` ของกลุ่มลง 1
+        '204':
+          description: Soft Delete สำเร็จ (No Content)
+        '400':
+          description: รหัส `id` ไม่ใช่ UUID (`TC_DL_LID_03`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_INVALID_REQUEST
+                message: id must be a UUID
+                field: id
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบจุดพิกัด หรือถูกลบไปแล้ว (`TC_DL_LID_02`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_LOCATION_NOT_FOUND
+                message: location not found
+
+  /admin/v1/geo/locations/{id}/status:
+    patch:
+      tags: [Location Management]
+      summary: เปลี่ยนสถานะจุดพิกัดรายจุด ACTIVE / INACTIVE (TC_PH_LID_01 – TC_PH_LID_03)
+      operationId: patchLocationStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusPatchRequest'
+      responses:
+        '200':
+          description: เปลี่ยนสถานะจุดพิกัดสำเร็จ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationDetail'
+        '400':
+          description: ค่า `status` ไม่ถูกต้อง (`TC_PH_LID_02`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_INVALID_STATUS
+                message: status must be ACTIVE or INACTIVE
+                field: status
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: ไม่พบจุดพิกัด หรือถูก Soft Delete ไปแล้ว (`TC_PH_LID_03`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_LOCATION_NOT_FOUND
+                message: location not found
+
+  # ==========================================================================
+  # 3. SYSTEM CONFIGURATION (/admin/v1/geo/config)
+  # ==========================================================================
+  /admin/v1/geo/config:
+    get:
+      tags: [System Configuration]
+      summary: ดึงค่าตั้งค่าระบบกลางล่าสุดครบทั้ง 16 คีย์ (TC_LI_CF_01 – TC_LI_CF_04)
+      operationId: getGeoConfig
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      responses:
+        '200':
+          description: คืนค่าตั้งค่าระบบกลางทั้ง 16 คีย์จากแถวล่าสุดเสมอ พร้อม `updated_at`
+          headers:
+            X-Geo-Version:
+              description: เลขเวอร์ชัน `geo_version` ปัจจุบันของ Pod (Non-PROD Debug Header)
+              schema:
+                type: integer
+                example: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigGetResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags: [System Configuration]
+      summary: บันทึกค่าตั้งค่าระบบกลางทั้งก้อนพร้อมตรวจสอบ Optimistic Lock (TC_UP_CF_01 – TC_UP_CF_12)
+      operationId: updateGeoConfig
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdHeader'
+        - $ref: '#/components/parameters/AdminIdHeader'
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/SaleChannelHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigUpdateRequest'
+      responses:
+        '200':
+          description: บันทึกการตั้งค่าสำเร็จ (Append แถวใหม่ลง `geo_configs`, เพิ่ม `geo_version + 1`, บันทึก `geo_audit_logs`, และ Publish `geo:reload` ไปยัง Redis)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigUpdateResponse'
+        '400':
+          description: ค่าตั้งค่าอยู่นอกช่วงที่กำหนด, ส่งคีย์ไม่ครบ, ชนิดข้อมูลผิด, หรือไม่ส่ง `updated_at` (`TC_UP_CF_06` – `TC_UP_CF_11`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_updated_at:
+                  summary: TC_UP_CF_06 — ไม่ส่ง updated_at
+                  value:
+                    code: GEO_INVALID_CONFIG
+                    message: updated_at is required
+                    field: updated_at
+                out_of_range:
+                  summary: TC_UP_CF_07 / TC_UP_CF_08 — ค่าตัวเลขอยู่นอกช่วงที่กำหนด
+                  value:
+                    code: GEO_INVALID_CONFIG
+                    message: max_poi_per_request is out of range
+                    field: max_poi_per_request
+                min_greater_than_max:
+                  summary: TC_UP_CF_09 — tier1_min_radius_m > tier1_max_radius_m
+                  value:
+                    code: GEO_INVALID_CONFIG
+                    message: tier1_max_radius_m is out of range
+                    field: tier1_max_radius_m
+                missing_key:
+                  summary: TC_UP_CF_10 — ส่งคีย์ใน settings มาไม่ครบ
+                  value:
+                    code: GEO_INVALID_CONFIG
+                    message: max_poi_per_request is required
+                    field: max_poi_per_request
+                invalid_type:
+                  summary: TC_UP_CF_11 — ส่งชนิดข้อมูลผิดประเภท
+                  value:
+                    code: GEO_INVALID_CONFIG
+                    message: max_poi_per_request must be an integer
+                    field: max_poi_per_request
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          description: ค่า `updated_at` ไม่ตรงกับข้อมูลล่าสุดในฐานข้อมูล เนื่องจากมีผู้ดูแลคนอื่นบันทึกตัดหน้าไปแล้ว (`TC_UP_CF_05`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: GEO_CONFLICT
+                message: "config was changed by someone else, reload and try again"
