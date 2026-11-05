@@ -4,10 +4,10 @@ info:
   version: 1.2.0
   description: |
     เอกสารข้อกำหนด OpenAPI 3.0.3 สำหรับระบบ **Geo Fencing Master Data & Admin Portal API** (`amaze-geo-fencing-service`)
-    - **Admin Authentication (`/r4m/v1/auth/*`)**: ขอ `access_token_admin` และดึง `user-id` จาก `/r4m/v1/auth/profile`
-    - **Group Management (`/admin/v1/geo/groups`)**: CRUD กลุ่มพื้นที่แคมเปญ, กรองด้วย `status`, `period` (`current` | `upcoming` | `expired`), `q` (Case-insensitive partial match บน `code`, `name_th`, `name_en`), การแบ่งหน้า `page`/`size`, เปลี่ยนสถานะ `PATCH /status`, และ `DELETE` แบบ Cascade Soft Delete (เฉพาะกลุ่มที่ `INACTIVE`)
-    - **Location Management (`/admin/v1/geo/locations`)**: CRUD จุดพิกัดร้านค้า (POI), ปัดเศษ `lat`/`lng` ทศนิยม 6 ตำแหน่งแบบ Half-up, ตรวจสอบกรอบพิกัดประเทศไทย (`lat: 5.5–20.5`, `lng: 97.3–105.7`), คำนวณค่า `effective_radius_m` และ `effective_dwell_seconds` จากค่ากลางเมื่อเป็น `null`, และแจ้งเตือน `warnings: [{"code": "GEO_OVERLAP", "with": "...", "distance_m": ...}]` เมื่อวงรัศมีทับซ้อนในกลุ่มเดียวกัน
-    - **System Configuration (`/admin/v1/geo/config`)**: ดึงค่าตั้งค่าระบบกลาง 16 คีย์ (`GET`) และบันทึกค่าตั้งค่ากลางทั้งก้อนภายใต้อ็อบเจกต์ `settings` พร้อม `updated_at` (`POST`) เพื่อตรวจสอบ Optimistic Concurrency Control (`409 GEO_CONFLICT`)
+    - **Admin Authentication (`/r4m/v1/auth/*`)
+    - **Group Management (`/admin/v1/geo/groups`)**: CRUD กลุ่มพื้นที่แคมเปญ
+    - **Location Management (`/admin/v1/geo/locations`)**: CRUD จุดพิกัดร้านค้า (POI)
+    - **System Configuration (`/admin/v1/geo/config`)**: ดึงค่าตั้งค่าระบบกลาง 16 คีย์
 
 servers:
   - url: http://geo-fencing-api.dev-ngw.amaze-x.com
