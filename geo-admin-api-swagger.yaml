@@ -4,7 +4,7 @@ info:
   version: 1.2.0
   description: |
     เอกสารข้อกำหนด OpenAPI 3.0.3 สำหรับระบบ **Geo Fencing Master Data & Admin Portal API** (`amaze-geo-fencing-service`)
-    - **Admin Authentication (`/r4m/v1/auth/*`)
+    - **Admin Authentication (`/r4m/v1/auth/*`)**
     - **Group Management (`/admin/v1/geo/groups`)**: CRUD กลุ่มพื้นที่แคมเปญ
     - **Location Management (`/admin/v1/geo/locations`)**: CRUD จุดพิกัดร้านค้า (POI)
     - **System Configuration (`/admin/v1/geo/config`)**: ดึงค่าตั้งค่าระบบกลาง 16 คีย์
